@@ -91,7 +91,7 @@ GET_HANDLERS = {
                       #  (server_error, 500),
                       #  (server_error, 404),
                       #  (bad_post_response, 'test_string'),
-                        (ok_response, 'test_string'), # ,'/user/get?token=1&user_id=100')
+                        (ok_response, ''), # ,'/user/get?token=1&user_id=100')
                         #   (ok_response, "JSON2...")
                         )
                     },
