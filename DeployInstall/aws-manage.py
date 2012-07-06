@@ -217,7 +217,7 @@ def addHostZabbix(hostname, ipAddr, type):
 		template_id = ZAB_CONF['lin_template_id'] 	
 		 	
 	# Form string for Json request
-	string ={'host':hostname,'ip':ipAddr,'dns':'','port':'10050','useip':1}
+	string = {'host':hostname,'ip':ipAddr,'dns':'','port':'10050','useip':1}
 	string["groups"] = {'groupid': group_id}
 	string ["templates"] = {'templateid': template_id}
 	# Create host "string"
