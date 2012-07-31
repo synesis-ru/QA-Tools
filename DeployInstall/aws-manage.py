@@ -9,6 +9,9 @@ from boto.ec2.elb import HealthCheck
 from fabric import api as fapi
 from fabric.contrib import files as cfapi
 
+# Zabbix_api is not module and should be installed manualy
+from zabbix_api import ZabbixAPI
+
 import time
 import tigrisCONFIG
 from tigrisCONFIG import *
@@ -73,7 +76,7 @@ def addUpdateDNS(domain, host, ip):
 def prepareInstance(ec2con, config):
 	# prepare block devices
 	bdm = BlockDeviceMapping()
-	bdm['/dev/sda1'] = BlockDeviceType(size=config['size']) # 8GB for Linux default, 30 Gb for windows
+	bdm['/dev/sda1'] = BlockDeviceType(config['size']) # 8GB for Linux default, 30 Gb for windows
 		
 	# run instance
 	reservation = ec2con.run_instances(
@@ -196,6 +199,44 @@ def createRAID(devices):
 	return '/raid'
 
 #--------------------------------------------------------#
+###      Zabbix auto_ops
+#--------------------------------------------------------#
+def addHostZabbix(hostname, ipAddr, type):
+	
+	
+	# login to zabbix server
+	zapi = ZabbixAPI(server=ZAB_CONF['server'], path="", log_level=6)
+	zapi.login(ZAB_CONF['username'], ZAB_CONF['password'])
+	# Select win or linux group
+	
+	if type == 'win-server':
+		group_id = ZAB_CONF['win_group_id']
+		template_id = ZAB_CONF['win_template_id'] 
+	elif type == 'cb-server':
+		group_id = ZAB_CONF['lin_group_id']
+		template_id = ZAB_CONF['lin_template_id'] 	
+		 	
+	# Form string for Json request
+	string = {'host':hostname,'ip':ipAddr,'dns':'','port':'10050','useip':1}
+	string["groups"] = {'groupid': group_id}
+	string ["templates"] = {'templateid': template_id}
+	# Create host "string"
+	createdhost=zapi.host.create(string)
+	
+
+def delHostZabbix(ip):
+
+	# login to zabbix server
+	zapi = ZabbixAPI(server=ZAB_CONF['server'], path="", log_level=6)
+	zapi.login(ZAB_CONF['username'], ZAB_CONF['password'])
+	
+	hostids=zapi.host.get({"output":"extend", 'filter':{'ip':ip}})
+	if len(hostids) == 1:
+		return hostids[0]['hostid']
+	else:
+		print bold +"\nNothing founded. Please make sure you specified a correct IP \n"+reset
+	result=zapi.host.delete({"hostid":hostids})
+#--------------------------------------------------------#
 ###      ELB operations for win instances              ###
 #--------------------------------------------------------#
 
@@ -277,15 +318,13 @@ def launchMore(type, count):
 			print "Error creating instances, abort"
 			return
 		# Configure RAID for DB servers
-		if '_RAID' in INSTANCE_CONFIG[type]:
+		if 'RAID' in INSTANCE_CONFIG[type]:
 			vols = createAttachVolumes(inst, INSTANCE_CONFIG[type]['RAID']['disks'], INSTANCE_CONFIG[type]['RAID']['size'])
 			with (fapi.settings(host_string=inst.publicIp)):
 				createRAID(vols)
 
 		instList.append(inst.id)
 		
-	
-	
 	#For win instances add instance to ELB ELB_CONFIG['elb_name']
 		if type == 'win-server':
 			# check if application is runing 
@@ -294,7 +333,9 @@ def launchMore(type, count):
 				lb = checkLB(ELB_CONFIG['elb_name'],INSTANCE_CONFIG[type])
 				print "Add Win instance to ELB %s" % ELB_CONFIG['elb_name']
 				addInstanceToELB(lb,inst.id)
-
+		# Register instance to zabbix
+		name = type+'-'+inst.publicIp
+		addHostZabbix(name,inst.publicIp,type)
 
 	print "Launched instances IDs : %s " % instList
 	
